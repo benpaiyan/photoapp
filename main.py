@@ -641,7 +641,10 @@ class PhotoManager(App):
 
     #     Logger.debug(f"Project {project_path} initialized successfully.")
 
-    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.db_connection = None
+        
     def setup_directories(self, project_path=None):
         """Sets up necessary directories for tags, faces, and databases."""
         Logger.debug("Setting up directories...")
@@ -2925,7 +2928,38 @@ class PhotoManager(App):
         if os.path.exists(imported_db):
             copyfile(imported_db, imported_db_backup)
         self.message('Backed up databases')
-
+        
+    def delete_table_from_project(self, project_name):
+        try:
+            db_path = os.path.join(
+                os.getenv('APPDATA'),
+                'snu photo manager',
+                project_name,
+                'Databases',
+                'folders.db'
+            )
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("DROP TABLE IF EXISTS your_table_name")  # <-- change table name here
+            conn.commit()
+            conn.close()
+            print(f"[INFO] Dropped table from {project_name}")
+        except Exception as e:
+            print(f"[ERROR] Failed to drop table from {project_name}: {e}")    
+    
+    def get_db_connection(self, project_name):
+        if self.db_connection is None:
+            db_path = os.path.join(os.getenv('APPDATA'), 'snu photo manager', project_name, 'Databases', 'folders.db')
+            self.db_connection = sqlite3.connect(db_path)
+            print(f"[DEBUG] Opened DB connection to: {db_path}")
+        return self.db_connection
+    
+    def close_db_connection(self):
+        if self.db_connection:
+            self.db_connection.close()
+            print("[DEBUG] Closed DB connection.")
+            self.db_connection = None
+            
     def database_restore(self):
         Logger.debug("photoapp PhotoManager.database_restore")
         """Attempts to restore the backup databases"""
@@ -2969,6 +3003,23 @@ class PhotoManager(App):
         except:
             return "Could not copy backups"
         return True
+    
+    def load_project_config(self, project_name):
+        # Set DB path
+        db_path = os.path.join(os.getenv('APPDATA'), 'snu photo manager', project_name, 'Databases', 'folders.db')
+
+        # If a previous connection exists, close it
+        if hasattr(self, "db_connection") and self.db_connection:
+            try:
+                self.db_connection.close()
+                print("[DEBUG] Closed previous DB connection.")
+            except:
+                pass
+            self.db_connection = None
+
+        # Now store the new connection
+        self.db_connection = sqlite3.connect(db_path)
+        print(f"[DEBUG] Opened new DB connection: {db_path}")
 
     def setup_database(self, restore=False):
         Logger.debug("photoapp PhotoManager.setup_database")
