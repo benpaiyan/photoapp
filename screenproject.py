@@ -1,6 +1,7 @@
 import os
 import configparser
 import shutil
+import sqlite3
 from kivy.uix.popup import Popup
 from kivy.app import App 
 from kivy.config import ConfigParser
@@ -286,8 +287,13 @@ class ProjectScreen(Screen):
 
         print(f"[INFO] Launched project: {selected_project}")
         
-    
-
+    def some_database_operation(self):
+        app = App.get_running_app()
+        conn = app.get_db_connection(app.selected_project)
+        cursor = conn.cursor()
+        # Perform database operations
+        cursor.close() 
+           
     def delete_selected_project(self):
         app = App.get_running_app()
         selected_project = self.ids.project_button.text.strip()
@@ -297,61 +303,32 @@ class ProjectScreen(Screen):
             return
 
         def confirm_deletion(instance):
-            selected_project = self.ids.project_button.text.strip()
-            app = App.get_running_app()
-
-            config_dir = app.get_project_config_directory()
-            project_name = selected_project.lower()
-
-            config_path = os.path.join(config_dir, f"{project_name}.ini")
-            project_folder_path = os.path.join(config_dir, project_name)
-
-            print(f"[DEBUG] Deleting .ini: {config_path}")
-            print(f"[DEBUG] Deleting folder: {project_folder_path}")
-
             try:
-                # 👉 Optional: try to close database or cleanup before delete
-                if hasattr(app, 'close_database_connection'):
-                    print("[DEBUG] Attempting to close database connection.")
-                    app.close_database_connection()
+                # Close the DB connection if open
+                app.close_db_connection()
 
-                # Delete the config file
-                if os.path.exists(config_path):
-                    os.remove(config_path)
-                    print(f"[INFO] Deleted project config: {config_path}")
-                else:
-                    print(f"[WARNING] Project config not found: {config_path}")
-
-                # Delete the project folder
-                if os.path.exists(project_folder_path):
-                    shutil.rmtree(project_folder_path)
-                    print(f"[INFO] Deleted project folder: {project_folder_path}")
-                else:
-                    print(f"[WARNING] Project folder not found: {project_folder_path}")
+                # Delete project folder
+                folder_path = os.path.join(os.getenv('APPDATA'), 'snu photo manager', selected_project)
+                print(f"[DEBUG] Deleting folder: {folder_path}")
+                if os.path.exists(folder_path):
+                    shutil.rmtree(folder_path)
+                    print(f"[INFO] Deleted folder: {folder_path}")
 
                 self.ids.project_button.text = "Select Current Project"
-                print("[INFO] Project deleted successfully.")
+                popup.dismiss()
 
             except Exception as e:
                 print(f"[ERROR] Failed to delete project: {e}")
 
-        def cancel_deletion(instance):
-            print("[INFO] Deletion cancelled.")
-            popup.dismiss()
-
         # Confirmation popup
+        popup = Popup(title="Confirm Deletion", size_hint=(None, None), size=(400, 200))
         box = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        box.add_widget(Label(text=f"Are you sure you want to delete project '{selected_project}'?"))
+        box.add_widget(Label(text=f"Are you sure you want to delete '{selected_project}'?"))
 
         btn_box = BoxLayout(size_hint_y=None, height=44, spacing=10)
-        btn_yes = Button(text="Yes")
-        btn_no = Button(text="No")
-        btn_box.add_widget(btn_yes)
-        btn_box.add_widget(btn_no)
+        btn_box.add_widget(Button(text="Cancel", on_release=popup.dismiss))
+        btn_box.add_widget(Button(text="Delete", on_release=confirm_deletion))
 
         box.add_widget(btn_box)
-
-        popup = Popup(title="Confirm Deletion", content=box, size_hint=(None, None), size=(400, 200))
-        btn_yes.bind(on_release=confirm_deletion)
-        btn_no.bind(on_release=cancel_deletion)
+        popup.add_widget(box)
         popup.open()
