@@ -2,6 +2,7 @@ import os
 import configparser
 import shutil
 import sqlite3
+import tempfile
 from kivy.uix.popup import Popup
 from kivy.app import App 
 from kivy.config import ConfigParser
@@ -46,18 +47,29 @@ Builder.load_string("""
                 height: dp(40)
 
         BoxLayout:
+            orientation: 'vertical'
+    
             size_hint: 1, 1
             pos_hint: {"center_x": 0.85, "center_y": 0.5}
 
             GridLayout:
+                # cols: 1
+                # padding: dp(20)
+                # spacing: dp(20)
+                # size_hint: 0.3,0.5
+                # height: self.minimum_height
+                # # size_hint: None, None
+                # # width: dp(500)
+                # # height: dp(500)
+                # pos_hint: {"center_x": 0.5, "center_y": 0.5}
                 cols: 1
-                padding: dp(20)
+                size_hint_y: None
+                height: self.minimum_height
                 spacing: dp(20)
-                size_hint: None, None
-                width: dp(500)
-                height: dp(500)
-                pos_hint: {"center_x": 0.5, "center_y": 0.5}
-
+                padding: dp(10), dp(20)
+                size_hint_x: 0.9
+                pos_hint: {"center_x": 0.5}
+                
                 BoxLayout:
                     orientation: 'vertical'
                     size_hint: 1, None
@@ -73,7 +85,10 @@ Builder.load_string("""
 
                     NormalLabel:
                         text: "Create New Project:"
-                    
+                        text_size:self.width,None # Equal width for 5 columns
+                        font_size: self.width * 0.03
+                        halign: "center" 
+                        valign: "middle"
                     BoxLayout:
                         orientation: 'horizontal'
                         size_hint: 1, None
@@ -302,33 +317,62 @@ class ProjectScreen(Screen):
             print("[WARNING] No valid project selected to delete!")
             return
 
+        # Construct paths
+        config_dir = app.get_project_config_directory()
+        ini_path = os.path.join(config_dir, f"{selected_project}.ini")
+        project_folder = os.path.join(os.getenv('APPDATA'), 'snu photo manager', selected_project.lower())
+
+        # Confirmation popup
         def confirm_deletion(instance):
             try:
-                # Close the DB connection if open
-                app.close_db_connection()
+                print(f"[DEBUG] Attempting to delete: {project_folder}")
 
-                # Delete project folder
-                folder_path = os.path.join(os.getenv('APPDATA'), 'snu photo manager', selected_project)
-                print(f"[DEBUG] Deleting folder: {folder_path}")
-                if os.path.exists(folder_path):
-                    shutil.rmtree(folder_path)
-                    print(f"[INFO] Deleted folder: {folder_path}")
+                # Close the database if it's open for this project
+                if getattr(app, "selected_project", None) == selected_project:
+                    app.close_database()
+                    print("[DEBUG] Database connection closed")
+
+                # Ensure all database files are closed
+                db_folder = os.path.join(project_folder, "Databases")
+                if os.path.exists(db_folder):
+                    for root, dirs, files in os.walk(db_folder):
+                        for file in files:
+                            if file.endswith(".db"):
+                                db_path = os.path.join(root, file)
+                                try:
+                                    os.chmod(db_path, 0o777)  # Change permissions to ensure access
+                                    with open(db_path, 'r+'):  # Open and close the file to release locks
+                                        pass
+                                except Exception as e:
+                                    print(f"[WARNING] Could not release lock for {db_path}: {e}")
+
+                # Remove ini file
+                if os.path.exists(ini_path):
+                    os.remove(ini_path)
+                    print(f"[INFO] Deleted .ini file: {ini_path}")
+
+                # Delete the project folder
+                if os.path.exists(project_folder):
+                    shutil.rmtree(project_folder)
+                    print(f"[INFO] Deleted project folder: {project_folder}")
+                else:
+                    print("[DEBUG] Project folder does not exist")
 
                 self.ids.project_button.text = "Select Current Project"
                 popup.dismiss()
 
+            except PermissionError as e:
+                print(f"[ERROR] Permission denied while deleting project: {e}")
             except Exception as e:
                 print(f"[ERROR] Failed to delete project: {e}")
 
-        # Confirmation popup
+        # Show popup
         popup = Popup(title="Confirm Deletion", size_hint=(None, None), size=(400, 200))
         box = BoxLayout(orientation='vertical', spacing=10, padding=10)
         box.add_widget(Label(text=f"Are you sure you want to delete '{selected_project}'?"))
-
         btn_box = BoxLayout(size_hint_y=None, height=44, spacing=10)
         btn_box.add_widget(Button(text="Cancel", on_release=popup.dismiss))
         btn_box.add_widget(Button(text="Delete", on_release=confirm_deletion))
-
         box.add_widget(btn_box)
         popup.add_widget(box)
         popup.open()
