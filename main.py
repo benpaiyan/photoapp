@@ -108,7 +108,7 @@ if platform == 'win':
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
 
 if platform == 'android':
-    from android.permissions import request_permissions, Permission
+    from android.permissions import request_permissions, Permission # type: ignore
     request_permissions([Permission.WRITE_EXTERNAL_STORAGE])
 
 if platform == 'linux':
