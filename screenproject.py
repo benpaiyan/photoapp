@@ -22,58 +22,43 @@ Builder.load_string("""
         Color:
             rgba: app.theme.background
         Rectangle:
-            size: root.size
-            pos: root.pos
+            size: self.size
+            pos: self.pos
         Color:
             rgba: app.theme.main_background
         Rectangle:
-            size: root.size
-            pos: root.pos
+            size: self.size
+            pos: self.pos
             source: 'data/mainbg.png'
 
     BoxLayout:
         orientation: 'vertical'
-    
 
         MainHeader:
             NormalButton:
-                text: 'back'
+                text: 'Back'
                 on_release: app.show_menu()
             HeaderLabel:
                 text: "Project Manager"
                 halign: 'center'
                 valign: 'middle'
                 size_hint_y: None
-                height: dp(40)
+                height: app.button_scale
 
-        BoxLayout:
-            orientation: 'vertical'
-    
-            size_hint: 1, 1
-            pos_hint: {"center_x": 0.85, "center_y": 0.5}
-
-            GridLayout:
-                # cols: 1
-                # padding: dp(20)
-                # spacing: dp(20)
-                # size_hint: 0.3,0.5
-                # height: self.minimum_height
-                # # size_hint: None, None
-                # # width: dp(500)
-                # # height: dp(500)
-                # pos_hint: {"center_x": 0.5, "center_y": 0.5}
-                cols: 1
-                size_hint_y: None
-                height: self.minimum_height
+        FloatLayout:
+            BoxLayout:
+                orientation: 'vertical'
                 spacing: dp(20)
-                padding: dp(10), dp(20)
-                size_hint_x: 0.9
-                pos_hint: {"center_x": 0.5}
-                
+                size_hint: None, None
+                width: min(root.width * 0.8, dp(400))
+                height: self.minimum_height
+                pos_hint: {"center_x": 0.5, "center_y": 0.5}
+
+                # Create New Project Section
                 BoxLayout:
                     orientation: 'vertical'
-                    size_hint: 1, None
-                    height: dp(100)
+                    size_hint_y: None
+                    height: self.minimum_height
                     canvas.before:
                         Color:
                             rgba: app.theme.area_background
@@ -85,13 +70,10 @@ Builder.load_string("""
 
                     NormalLabel:
                         text: "Create New Project:"
-                        text_size:self.width,None # Equal width for 5 columns
-                        font_size: self.width * 0.03
-                        halign: "center" 
-                        valign: "middle"
+                    
                     BoxLayout:
                         orientation: 'horizontal'
-                        size_hint: 1, None
+                        size_hint_y: None
                         height: dp(40)
 
                         NormalInput:
@@ -100,7 +82,7 @@ Builder.load_string("""
                             disable_lines: True
                             hint_text: 'Project Name'
                             on_text: ok_button.disabled = root.project_name_exists(self.text)
-
+                            height: dp(40)
                         NormalButton:
                             id: ok_button
                             text: 'Ok'
@@ -108,10 +90,11 @@ Builder.load_string("""
                             size_hint_y: None
                             height: dp(40)
 
+                # Select Project Section
                 BoxLayout:
                     orientation: 'vertical'
-                    size_hint: 1, None
-                    height: dp(100)
+                    size_hint_y: None
+                    height: self.minimum_height
                     canvas.before:
                         Color:
                             rgba: app.theme.area_background
@@ -124,23 +107,18 @@ Builder.load_string("""
                     NormalLabel:
                         text: "Select Project"
 
-                    GridLayout:
-                        size_hint: 1, None
+                    MenuStarterButtonWide:
+                        id: project_button
+                        text: 'Select Current Project'
                         size_hint_y: None
-                        height: dp(55)
-                        cols: 1
+                        height: dp(44)
+                        on_release: root.open_project_dropdown(self)
 
-                        MenuStarterButtonWide:
-                            id: project_button
-                            text: 'Select Current Project'
-                            size_hint_y: None
-                            height: dp(44)
-                            on_release: root.open_project_dropdown(self)
-                            
+                # Launch Project Section
                 BoxLayout:
                     orientation: 'vertical'
-                    size_hint: 1, None
-                    height: dp(100)
+                    size_hint_y: None
+                    height: self.minimum_height
                     canvas.before:
                         Color:
                             rgba: app.theme.area_background
@@ -149,23 +127,22 @@ Builder.load_string("""
                             size: self.size
                             source: 'data/buttonflat.png'
                     padding: dp(10)
+
                     NormalLabel:
                         text: "Launch The Selected Project"
                     
-                    BoxLayout:
-                        orientation: 'horizontal'
-                        size_hint: 1, None
+                    WideButton:
+                        id: launch_button
+                        text: 'Launch Project'
+                        on_release: root.launch_project()
+                        size_hint_y: None
                         height: dp(40)
-                        WideButton:
-                            id: launch_button
-                            text: 'Launch Project'
-                            on_release: root.launch_project()
-                            size_hint_y: None
-                            height: dp(40)
+
+                # Delete Project Section
                 BoxLayout:
                     orientation: 'vertical'
-                    size_hint: 1, None
-                    height: dp(100)
+                    size_hint_y: None
+                    height: self.minimum_height
                     canvas.before:
                         Color:
                             rgba: app.theme.area_background
@@ -174,19 +151,34 @@ Builder.load_string("""
                             size: self.size
                             source: 'data/buttonflat.png'
                     padding: dp(10)
+
                     NormalLabel:
                         text: "Delete The Selected Project"
                     
-                    BoxLayout:
-                        orientation: 'horizontal'
-                        size_hint: 1, None
+                    DeleteButton:
+                        id: delete_button
+                        padding: dp(20)
+                        spacing: dp(20)
+                        text: 'Delete Project'
+                        color: (0, 0, 0, 1)                       
                         height: dp(40)
-                        WideButton:
-                            id: launch_button
-                            text: 'Delete Project'
-                            on_release:root.delete_selected_project()
-                            size_hint_y: None
-                            height: dp(40)
+                        disabled: True
+                        on_release: root.delete_selected_project()
+     
+                        canvas.before:
+                            Color:
+                                rgba: 0, 0, 0, 0.2  # Shadow color
+                            RoundedRectangle:
+                                pos: self.x, self.y - dp(2)
+                                size: self.size
+                                radius: [20]
+
+                            Color:
+                                rgba: self.background_color
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [20]
 
 """)
 
@@ -275,6 +267,8 @@ class ProjectScreen(Screen):
         self.ids.project_button.text = project_name 
         app = App.get_running_app()
         app.load_project_config(project_name) 
+        self.ids.delete_button.disabled = False
+
         dropdown.dismiss()
         
     def launch_project(self):
@@ -376,3 +370,5 @@ class ProjectScreen(Screen):
         box.add_widget(btn_box)
         popup.add_widget(box)
         popup.open()
+        
+        self.ids.delete_button.disabled = True
