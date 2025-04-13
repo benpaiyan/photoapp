@@ -127,7 +127,7 @@ def create_destination_path(destination_folder, capture_date, new_filename):
         day_mapping[(year, month)][actual_day] = f"Day_{next_day_number}_({formatted_date})"
     
     dayX = day_mapping[(year, month)][actual_day]
-    organized_root = os.path.join(destination_folder, "organized_folder", year, month)
+    organized_root = os.path.join(destination_folder, "organized_folder")
     destination_day_folder = os.path.join(organized_root, dayX)
     os.makedirs(destination_day_folder, exist_ok=True)
     
