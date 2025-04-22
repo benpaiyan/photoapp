@@ -17,6 +17,7 @@ from kivy.uix.screenmanager import Screen
 from generalelements import NormalPopup, ConfirmPopup, MoveConfirmPopup,MenuButton, ScanningPopup, InputPopup, InputPopupTag, MenuButton, NormalDropDown, AlbumSortDropDown, AlbumExportDropDown
 Builder.load_string("""
 <ProjectScreen>:
+    id:project_screen
     name: "project_screen"
     canvas.before:
         Color:
@@ -82,13 +83,13 @@ Builder.load_string("""
                             disable_lines: True
                             hint_text: 'Project Name'
                             on_text: ok_button.disabled = root.project_name_exists(self.text)
-                            height: dp(40)
+                            height: self.line_height + dp(20)
                         NormalButton:
                             id: ok_button
                             text: 'Ok'
                             on_release: root.create_project_folder(new_project_name.text)
                             size_hint_y: None
-                            height: dp(40)
+                            height:self.texture_size[1] + dp(20)
 
                 # Select Project Section
                 BoxLayout:
@@ -157,28 +158,55 @@ Builder.load_string("""
                     
                     DeleteButton:
                         id: delete_button
-                        padding: dp(20)
-                        spacing: dp(20)
+                        padding: dp(10)
                         text: 'Delete Project'
                         color: (0, 0, 0, 1)                       
                         height: dp(40)
                         disabled: True
                         on_release: root.delete_selected_project()
      
-                        canvas.before:
-                            Color:
-                                rgba: 0, 0, 0, 0.2  # Shadow color
-                            RoundedRectangle:
-                                pos: self.x, self.y - dp(2)
-                                size: self.size
-                                radius: [20]
+                        
 
-                            Color:
-                                rgba: self.background_color
-                            RoundedRectangle:
-                                pos: self.pos
-                                size: self.size
-                                radius: [20]
+                                
+<ConfirmDeletePopup@Popup>:
+    title: "Confirm Deletion"
+    id: confirm_popup
+    size_hint: None, None
+    size: dp(400), dp(200)
+    auto_dismiss: False
+    background: ""  # Remove default background image
+    background_color: app.theme.background
+
+   
+        
+
+    BoxLayout:
+        orientation: 'vertical'
+        spacing: dp(10)
+        padding: dp(10)
+
+        Label:
+            id: confirm_label
+            text: "Are you sure you want to delete "
+            color: 0, 0, 0, 1
+            text_size: self.size
+            halign: 'center'
+            valign: 'middle'
+
+        BoxLayout:
+            size_hint_y: None
+            height: dp(44)
+            spacing: dp(10)
+
+            WideButton:
+                text: "Cancel"
+                on_release:root.on_cancel()
+                    
+
+            WideButton:
+                text: "Delete"
+                id: yes_btn
+                on_release: root.confirm_deletion()
 
 """)
 
@@ -316,59 +344,71 @@ class ProjectScreen(Screen):
         ini_path = os.path.join(config_dir, f"{selected_project}.ini")
         project_folder = os.path.join(os.getenv('APPDATA'), 'snu photo manager', selected_project.lower())
 
-        # Confirmation popup
-        def confirm_deletion(instance):
-            try:
-                print(f"[DEBUG] Attempting to delete: {project_folder}")
-
-                # Close the database if it's open for this project
-                if getattr(app, "selected_project", None) == selected_project:
-                    app.close_database()
-                    print("[DEBUG] Database connection closed")
-
-                # Ensure all database files are closed
-                db_folder = os.path.join(project_folder, "Databases")
-                if os.path.exists(db_folder):
-                    for root, dirs, files in os.walk(db_folder):
-                        for file in files:
-                            if file.endswith(".db"):
-                                db_path = os.path.join(root, file)
-                                try:
-                                    os.chmod(db_path, 0o777)  # Change permissions to ensure access
-                                    with open(db_path, 'r+'):  # Open and close the file to release locks
-                                        pass
-                                except Exception as e:
-                                    print(f"[WARNING] Could not release lock for {db_path}: {e}")
-
-                # Remove ini file
-                if os.path.exists(ini_path):
-                    os.remove(ini_path)
-                    print(f"[INFO] Deleted .ini file: {ini_path}")
-
-                # Delete the project folder
-                if os.path.exists(project_folder):
-                    shutil.rmtree(project_folder)
-                    print(f"[INFO] Deleted project folder: {project_folder}")
-                else:
-                    print("[DEBUG] Project folder does not exist")
-
-                self.ids.project_button.text = "Select Current Project"
-                popup.dismiss()
-
-            except PermissionError as e:
-                print(f"[ERROR] Permission denied while deleting project: {e}")
-            except Exception as e:
-                print(f"[ERROR] Failed to delete project: {e}")
-
-        # Show popup
-        popup = Popup(title="Confirm Deletion", size_hint=(None, None), size=(400, 200))
-        box = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        box.add_widget(Label(text=f"Are you sure you want to delete '{selected_project}'?"))
-        btn_box = BoxLayout(size_hint_y=None, height=44, spacing=10)
-        btn_box.add_widget(Button(text="Cancel", on_release=popup.dismiss))
-        btn_box.add_widget(Button(text="Delete", on_release=confirm_deletion))
-        box.add_widget(btn_box)
-        popup.add_widget(box)
+        # Create and open the ConfirmDeletePopup
+        popup = ConfirmDeletePopup(
+            project_name=selected_project,
+            project_folder=project_folder,
+            ini_path=ini_path
+        )
         popup.open()
-        
         self.ids.delete_button.disabled = True
+        
+class ConfirmDeletePopup(Popup):
+    def __init__(self, project_name, project_folder, ini_path, **kwargs):
+        super().__init__(**kwargs)
+        self.project_name = project_name
+        self.project_folder = project_folder
+        self.ini_path = ini_path
+
+    def confirm_deletion(self):
+        app = App.get_running_app()
+
+        try:
+            print(f"[DEBUG] Attempting to delete: {self.project_folder}")
+
+            if getattr(app, "selected_project", None) == self.project_name:
+                app.close_database()
+                print("[DEBUG] Database connection closed")
+
+            db_folder = os.path.join(self.project_folder, "Databases")
+            if os.path.exists(db_folder):
+                for root, dirs, files in os.walk(db_folder):
+                    for file in files:
+                        if file.endswith(".db"):
+                            db_path = os.path.join(root, file)
+                            try:
+                                os.chmod(db_path, 0o777)
+                                with open(db_path, 'r+'):
+                                    pass
+                            except Exception as e:
+                                print(f"[WARNING] Could not release lock for {db_path}: {e}")
+
+            if os.path.exists(self.ini_path):
+                os.remove(self.ini_path)
+                print(f"[INFO] Deleted .ini file: {self.ini_path}")
+
+            if os.path.exists(self.project_folder):
+                shutil.rmtree(self.project_folder)
+                print(f"[INFO] Deleted project folder: {self.project_folder}")
+            else:
+                print("[DEBUG] Project folder does not exist")
+
+            app.root.ids.project_button.text = "Select Current Project"
+            self.dismiss()  # Close the popup after successful deletion
+
+        except PermissionError as e:
+            print(f"[ERROR] Permission denied while deleting project: {e}")
+        except Exception as e:
+            print(f"[ERROR] Failed to delete project: {e}")
+            
+        self.dismiss() 
+        # Ensure the popup is closed even if an error occurs
+        Popup.dismiss(self)
+        
+    def on_cancel(self):
+        app = App.get_running_app()
+        try:
+            app.root.ids.project_screen.ids.delete_button.disabled = False
+        except Exception as e:
+            print(f"[ERROR] Could not re-enable delete_button: {e}")
+        self.dismiss()
