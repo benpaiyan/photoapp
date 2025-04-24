@@ -14,10 +14,11 @@ from kivy.uix.widget import Widget
 from kivy.lang import Builder
 from kivy.uix.dropdown import DropDown
 from kivy.uix.screenmanager import Screen
+from kivy.uix.screenmanager import ScreenManager
 from generalelements import NormalPopup, ConfirmPopup, MoveConfirmPopup,MenuButton, ScanningPopup, InputPopup, InputPopupTag, MenuButton, NormalDropDown, AlbumSortDropDown, AlbumExportDropDown
 Builder.load_string("""
 <ProjectScreen>:
-    id:project_screen
+    id: project_screen
     name: "project_screen"
     canvas.before:
         Color:
@@ -109,6 +110,7 @@ Builder.load_string("""
                         text: "Select Project"
 
                     MenuStarterButtonWide:
+                        name: 'project_button'
                         id: project_button
                         text: 'Select Current Project'
                         size_hint_y: None
@@ -216,6 +218,7 @@ Builder.load_string("""
 class ProjectScreen(Screen):
     def create_project_folder(self, folder_name):
         """Creates a folder in the AppData Roaming directory"""
+        
         app = App.get_running_app()
         if not folder_name.strip():
             return 
@@ -272,13 +275,18 @@ class ProjectScreen(Screen):
             
     def open_project_dropdown(self,instance=None):
         """Creates a dropdown menu with available projects."""
+        
+        self.screen_manager = ScreenManager()
+        self.project_screen = ProjectScreen(name="project_screen")  # must match the name!
+        self.screen_manager.add_widget(self.project_screen)
         app = App.get_running_app()
+        
         dropdown = NormalDropDown() 
 
         available_projects = app.get_available_projects() 
         selected_project = self.ids.project_button.text 
         available_projects = [project for project in available_projects if project != selected_project]
-
+        available_projects = app.get_available_projects()
         if not available_projects:
             btn = Button(text="No projects found", size_hint_y=None, height=44)
             dropdown.add_widget(btn)
@@ -287,63 +295,52 @@ class ProjectScreen(Screen):
                 btn = MenuButton(text=project, size_hint_y=None, height=44)
                 btn.bind(on_release=lambda btn=btn: self.select_project(btn.text, dropdown))
                 dropdown.add_widget(btn)
-
         dropdown.open(instance)
-        
+
     def select_project(self, project_name, dropdown):
         """Handles project selection from the dropdown."""
         self.ids.project_button.text = project_name 
         app = App.get_running_app()
         app.load_project_config(project_name) 
         self.ids.delete_button.disabled = False
-
         dropdown.dismiss()
-        
+
     def launch_project(self):
         """Launches the selected project and opens the DatabaseScreen."""
         app = App.get_running_app()
         selected_project = self.ids.project_button.text 
-
-
         if not selected_project or selected_project in ["Default_project", "Select Current Project"]:
             print("[WARNING] No valid project selected to launch!")
             return    
         app.selected_project = selected_project
-
-        
         app.load_project_config(selected_project)
 
         app.screen_manager.current = 'database'
-        
         selected_project = selected_project.lower() 
         appdata_path = os.path.join(os.getenv('APPDATA'), 'snu photo manager', selected_project)
-
+        
         app.setup_directories(appdata_path)
         app.refresh_database_screen()
-        # app.show_database(selected_project)
-
         print(f"[INFO] Launched project: {selected_project}")
-        
+
     def some_database_operation(self):
         app = App.get_running_app()
         conn = app.get_db_connection(app.selected_project)
         cursor = conn.cursor()
         # Perform database operations
-        cursor.close() 
-           
+        cursor.close()
+
     def delete_selected_project(self):
+
         app = App.get_running_app()
         selected_project = self.ids.project_button.text.strip()
-
         if not selected_project or selected_project in ["Default_project", "Select Current Project"]:
             print("[WARNING] No valid project selected to delete!")
             return
-
         # Construct paths
         config_dir = app.get_project_config_directory()
         ini_path = os.path.join(config_dir, f"{selected_project}.ini")
         project_folder = os.path.join(os.getenv('APPDATA'), 'snu photo manager', selected_project.lower())
-
         # Create and open the ConfirmDeletePopup
         popup = ConfirmDeletePopup(
             project_name=selected_project,
@@ -352,16 +349,27 @@ class ProjectScreen(Screen):
         )
         popup.open()
         self.ids.delete_button.disabled = True
+
+    def refresh_project_list(self):
+        self.ids.project_button.text = "Select Current Project"
+        self.ids.delete_button.disabled = True
         
+    def handle_project_deletion_ui(self):
+        """Reset UI elements after project deletion."""
+        self.ids.project_button.text = "Select Current Project"
+        self.ids.delete_button.disabled = True
+            
 class ConfirmDeletePopup(Popup):
     def __init__(self, project_name, project_folder, ini_path, **kwargs):
         super().__init__(**kwargs)
         self.project_name = project_name
         self.project_folder = project_folder
         self.ini_path = ini_path
+        
 
     def confirm_deletion(self):
         app = App.get_running_app()
+        
 
         try:
             print(f"[DEBUG] Attempting to delete: {self.project_folder}")
@@ -383,6 +391,8 @@ class ConfirmDeletePopup(Popup):
                             except Exception as e:
                                 print(f"[WARNING] Could not release lock for {db_path}: {e}")
 
+            
+            
             if os.path.exists(self.ini_path):
                 os.remove(self.ini_path)
                 print(f"[INFO] Deleted .ini file: {self.ini_path}")
@@ -392,8 +402,16 @@ class ConfirmDeletePopup(Popup):
                 print(f"[INFO] Deleted project folder: {self.project_folder}")
             else:
                 print("[DEBUG] Project folder does not exist")
+                
+            
 
-            app.root.ids.project_button.text = "Select Current Project"
+            # Refresh the dropdown options
+            try:
+                screen = app.screen_manager.get_screen('project')
+                screen.handle_project_deletion_ui()
+            except Exception as e:
+                print(f"[ERROR] Could not update UI after deletion: {e}")
+
             self.dismiss()  # Close the popup after successful deletion
 
         except PermissionError as e:
@@ -401,14 +419,14 @@ class ConfirmDeletePopup(Popup):
         except Exception as e:
             print(f"[ERROR] Failed to delete project: {e}")
             
-        self.dismiss() 
-        # Ensure the popup is closed even if an error occurs
-        Popup.dismiss(self)
         
+        self.dismiss()
+
     def on_cancel(self):
         app = App.get_running_app()
         try:
-            app.root.ids.project_screen.ids.delete_button.disabled = False
+            screen = app.screen_manager.get_screen('project')
+            screen.ids.delete_button.disabled = False
         except Exception as e:
             print(f"[ERROR] Could not re-enable delete_button: {e}")
         self.dismiss()
